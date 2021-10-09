@@ -8,6 +8,7 @@ use pathdiff;
 
 use std::collections::HashMap;
 use std::env;
+use std::fs;
 use std::path::Path;
 use std::process::Command;
 use std::process::exit;
@@ -18,7 +19,7 @@ const LINE_RANGE_PARAM: &str = "LINE_RANGE";
 fn main() {
     let mut git_commit_link_scheme: HashMap<String, String> = HashMap::new();
     git_commit_link_scheme.insert(String::from("git@gitlab.com"), String::from("https://gitlab.com/REPO-NAME/-/blob/COMMIT/FILE#LINE_RANGE"));
-    git_commit_link_scheme.insert(String::from("git@github.com"), String::from("https://github.com/REPO/blob/COMMIT/FILE#LINE_RANGE"));
+    git_commit_link_scheme.insert(String::from("git@github.com"), String::from("https://github.com/REPO-NAME/blob/COMMIT/FILE#LINE_RANGE"));
 
     let matches = App::new("git-permalink-rs")
         .version("0.1")
@@ -29,6 +30,7 @@ fn main() {
         .get_matches();
 
     let path = Path::new(matches.value_of(PATH_PARAM).unwrap());
+    let path = fs::canonicalize(Path::new(path)).unwrap();
 
     if path.exists() {
         // get the dir of file
@@ -104,14 +106,12 @@ fn main() {
     }
     let git_repo_base_path = String::from_utf8(output.stdout.to_vec()).expect("Unable to parse stdout as valid Utf8");
 
-    let relative_path_to_file = pathdiff::diff_paths(Path::new(&git_repo_base_path), Path::new(path));
-    println!("{}", path.to_str().unwrap());
-    println!("{:?}", relative_path_to_file);
-    println!("{}", relative_path_to_file.unwrap().into_os_string().to_str().unwrap());
-    let file_path = "HECK";
+    let relative_path_to_file = pathdiff::diff_paths(Path::new(&path), Path::new(&git_repo_base_path)).unwrap();
+    // for some reason there is always an unnessecary ../ just drop it.
+    let relative_path_to_file = String::from(relative_path_to_file.into_os_string().to_str().unwrap()).replace("../", "");
+    let relative_path_to_file = relative_path_to_file.split("/").collect::<Vec<&str>>().into_iter().skip(1).collect::<Vec<&str>>().join("/");
 
+    let final_link = url_pattern.replace("REPO-NAME", &repo_name).replace("COMMIT", &current_commit).replace("FILE", &relative_path_to_file).replace("LINE_RANGE", &line_range);
 
-    let final_link = url_pattern.replace("REPO-NAME", &repo_name).replace("COMMIT", &current_commit).replace("FILE", file_path).replace("LINE_RANGE", &line_range);
-
-    println!("{}", final_link);
+    println!("{}", final_link)
 }
